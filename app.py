@@ -4,6 +4,7 @@ import random
 from dataclasses import dataclass
 from typing import List
 
+MAX_ATTEMPTS = 1_000_000
 
 NUM_DICE = 5
 
@@ -98,14 +99,29 @@ class KeepOnesStrategy(Strategy):
         return keep
 
 
+class KeepOnesAndTwosStrategy(Strategy):
+    def __call__(self, game: Game, player: Player, dice: List[Dice]) -> List[Dice]:
+        keep = []
+        for die in dice:
+            if die.value in (3, 1, 2):
+                keep.append(die)
+
+        if not keep:
+            keep = [min(dice, key=lambda d: d.value)]
+
+        return keep
+
+
 class KeepOnesUnlessLosingStrategy(Strategy):
     def __call__(self, game: Game, player: Player, dice: List[Dice]) -> List[Dice]:
         keep = []
         for die in dice:
             if die.value == 3:
                 keep.append(die)
-            elif die.value == 1 and (min(p.score for p in game.players if p.turn.over) > player.score):
-                keep.append(die)
+            elif die.value == 1:
+                prior_scores = [p.score for p in game.players if p.turn.over]
+                if len(prior_scores) > 0 and min(prior_scores) > player.score:
+                    keep.append(die)
 
         if not keep:
             keep = [min(dice, key=lambda d: d.value)]
@@ -140,18 +156,24 @@ class Game:
 
 
 def run():
-    strategies = [RandomStrategy(), SimpleStrategy(), KeepOnesStrategy(), KeepOnesUnlessLosingStrategy()]
+    # strategies = [RandomStrategy(), SimpleStrategy(), KeepOnesStrategy(), KeepOnesUnlessLosingStrategy(),
+    #               KeepOnesAndTwosStrategy()]
+    strategies = [SimpleStrategy(), KeepOnesUnlessLosingStrategy()]
 
     scores = {str(s): 0 for s in strategies}
-    for attempt in range(100000):
+    for attempt in range(MAX_ATTEMPTS):
+        if attempt % 10000 == 0:
+            print(f"Attempt: {attempt}")
         players = [Player(str(s), s) for s in strategies]
+        # random.shuffle(players)
+        players.reverse()
         game = Game(players)
         winners = game.play()
         for winner in (w for w in winners if len(winners) == 1):
             scores[str(winner.strategy)] = scores[str(winner.strategy)] + 1
 
     for strategy, score in scores.items():
-        print(f"{strategy}: {score}")
+        print(f"{strategy}: {(score / MAX_ATTEMPTS) * 100}%")
 
 
 if __name__ == "__main__":
